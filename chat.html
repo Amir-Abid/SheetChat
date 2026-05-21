@@ -411,7 +411,7 @@
    CONFIG — fill these two in before sending the file to anyone.
    There is no settings screen, so this is the only place to set them.
    =================================================================== */
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycby6CP44Ld2eGzdwei5Xh_pu_jVhbA1_kyH1qC02i5ZBXUgbVSY8M9LpGKC_GnYfUO1R-g/exec";   // <-- paste your Apps Script /exec URL between the quotes
+const WEB_APP_URL = "";   // <-- paste your Apps Script /exec URL between the quotes
 
 /* PRESET_NAME is just a fallback. The real name should come from each
    person's link: e.g.  https://you.github.io/mychat/index.html?name=Amir
@@ -952,16 +952,33 @@ const callBtn = document.getElementById('callBtn');
 const callOverlay = document.getElementById('callOverlay');
 const callCard = document.getElementById('callCard');
 const callAudios = document.getElementById('callAudios');
-/* STUN lets two devices discover each other across networks and handles
-   most connections. Some strict networks (certain mobile / office setups)
-   also need a TURN relay — if you need that, get your OWN working TURN
-   credentials (e.g. a free account at metered.ca) and uncomment the line
-   below. Do NOT add a dead or unreliable public TURN server: a relay that
-   does not work only slows down and destabilises calls. */
+/* STUN finds each device's address; TURN (Metered) relays the audio when
+   two networks cannot reach each other directly — this is what lets a phone
+   on mobile data connect. Credentials below are from your metered.ca account;
+   to swap them later, replace the username/credential values. */
 const rtcConfig = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' }
-  // ,{ urls: 'turn:YOUR_TURN_HOST:443', username: 'YOUR_USERNAME', credential: 'YOUR_PASSWORD' }
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  {
+    urls: 'turn:global.relay.metered.ca:80',
+    username: 'fccf836cca20b5d2dd68557a',
+    credential: '0vgJ1iaw81hILTT8'
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+    username: 'fccf836cca20b5d2dd68557a',
+    credential: '0vgJ1iaw81hILTT8'
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:443',
+    username: 'fccf836cca20b5d2dd68557a',
+    credential: '0vgJ1iaw81hILTT8'
+  },
+  {
+    urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+    username: 'fccf836cca20b5d2dd68557a',
+    credential: '0vgJ1iaw81hILTT8'
+  }
 ]};
 
 let callState = 'idle';        // idle | ringing | incall
@@ -993,9 +1010,9 @@ function waitForIce(p) {
       }
     };
     p.addEventListener('icegatheringstatechange', check);
-    // fallback if the browser never reports 'complete' — STUN normally
-    // finishes gathering well before this.
-    setTimeout(resolve, 5000);
+    // fallback if the browser never reports 'complete' — allow time for
+    // TURN relay candidates to be gathered before we send the connection.
+    setTimeout(resolve, 7000);
   });
 }
 
