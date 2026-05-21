@@ -111,7 +111,6 @@
   #chat {
     flex: 1; overflow-y: auto; padding: 20px 18px 8px;
     display: flex; flex-direction: column; gap: 3px;
-    scroll-behavior: smooth;
   }
   #chat::-webkit-scrollbar { width: 8px; }
   #chat::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; }
@@ -197,7 +196,7 @@
     100% { box-shadow: 0 0 0 0 rgba(255,59,107,0); }
   }
 
-  .inputwrap { flex: 1; }
+  .inputwrap { flex: 1; position: relative; }
   #input {
     width: 100%; resize: none; min-height: 46px; max-height: 150px;
     background: var(--glass-2); border: 1px solid var(--border);
@@ -288,6 +287,52 @@
   #nameError.show { display: flex; }
   #nameError .cstate b { color: var(--text); }
 
+  /* people · mentions · receipts · jump-to-latest */
+  .peoplelist {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-top: 14px; max-height: 320px; overflow-y: auto;
+  }
+  .psub { font-size: 11px; color: var(--muted); font-weight: 500; flex: none; }
+  .mention { color: var(--accent); font-weight: 700; }
+  .mention.me { background: rgba(108,140,255,0.22); border-radius: 5px; padding: 0 3px; }
+  .bubble.mentionme { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .receipt { font-size: 10.5px; }
+  .receipt.read { color: var(--accent); font-weight: 700; }
+  #mentionPop {
+    position: absolute; left: 0; right: 0; bottom: calc(100% + 6px);
+    background: var(--glass-2); border: 1px solid var(--border);
+    border-radius: 14px; padding: 6px; z-index: 20;
+    display: none; flex-direction: column; gap: 2px;
+    max-height: 210px; overflow-y: auto;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.45);
+  }
+  #mentionPop.show { display: flex; }
+  .mentionitem {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 11px; border: none; border-radius: 10px; cursor: pointer;
+    background: none; color: var(--text); font-family: inherit;
+    font-size: 14px; font-weight: 600; text-align: left;
+  }
+  .mentionitem.sel, .mentionitem:hover { background: rgba(108,140,255,0.22); }
+  .mentionitem .ndot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  #jumpBtn {
+    position: fixed; right: 16px; bottom: 86px; z-index: 30;
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--glass-2);
+    color: var(--text); cursor: pointer; font-size: 20px;
+    display: none; place-items: center;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.45);
+  }
+  #jumpBtn.show { display: grid; }
+  #jumpBtn:active { transform: scale(0.9); }
+  #peopleOverlay {
+    position: fixed; inset: 0; z-index: 55; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.55);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  }
+  #peopleOverlay.show { display: flex; }
+
   /* ---- phone / small screens ---- */
   @media (max-width: 600px) {
     header { padding: 9px 10px; gap: 6px; }
@@ -316,9 +361,9 @@
     <div class="status"><span id="pulse" class="pulse"></span><span id="statusText">Connecting…</span></div>
   </div>
   <button class="iconbtn" id="callBtn" title="Start a voice call">📞</button>
+  <button class="iconbtn" id="peopleBtn" title="Who's in the chat">👥</button>
+  <button class="iconbtn" id="readAllBtn" title="Read all aloud / stop">🔊</button>
   <button class="iconbtn" id="soundBtn" title="Toggle sounds">🔔</button>
-  <button class="iconbtn" id="readAllBtn" title="Read all messages aloud">🔊</button>
-  <button class="iconbtn" id="stopSpeakBtn" title="Stop reading">⏹</button>
   <button class="iconbtn" id="themeBtn" title="Light / dark mode">🌙</button>
   <button class="iconbtn" id="fullscreenBtn" title="Full screen">⛶</button>
 </header>
@@ -333,13 +378,17 @@
   <button class="circlebtn" id="micBtn" title="Dictate (speech to text)">🎤</button>
   <button class="circlebtn" id="recordBtn" title="Record a voice note">⏺</button>
   <div class="inputwrap">
-    <textarea id="input" placeholder="Type a message, or tap the mic to speak…"></textarea>
+    <div id="mentionPop"></div>
+    <textarea id="input" placeholder="Type a message — use @ to mention someone…"></textarea>
   </div>
   <button id="sendBtn" title="Send">➤</button>
 </div>
 
+<button id="jumpBtn" title="Jump to latest">⌄</button>
+
 <div id="callAudios" style="display:none"></div>
 <div id="callOverlay"><div class="callcard" id="callCard"></div></div>
+<div id="peopleOverlay"><div class="callcard" id="peopleCard"></div></div>
 
 <div id="nameError">
   <div class="callcard">
@@ -359,7 +408,7 @@
    CONFIG — fill these two in before sending the file to anyone.
    There is no settings screen, so this is the only place to set them.
    =================================================================== */
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwYiPM69KKryd_bPTdPzSD40fyhdyjKoHWNzkZlI1X8VWS3wCp2HntHB48_fnPOf-28GA/exec";   // <-- paste your Apps Script /exec URL between the quotes
+const WEB_APP_URL = "";   // <-- paste your Apps Script /exec URL between the quotes
 
 /* PRESET_NAME is just a fallback. The real name should come from each
    person's link: e.g.  https://you.github.io/mychat/index.html?name=Amir
@@ -493,20 +542,27 @@ async function poll() {
     const data = await res.json();
     if (data && data.ok && Array.isArray(data.messages)) {
       const myName = getName();
-      let newFromOthers = false;
+      let newFromOthers = false, mentionedBy = '';
       for (const m of data.messages) {
         if (!seenIds.has(m.id)) {
-          if (!firstLoad && m.sender !== myName) newFromOthers = true;
+          if (!firstLoad && m.sender !== myName) {
+            newFromOthers = true;
+            if (textMentionsMe(m.text)) mentionedBy = m.sender;
+          }
           seenIds.add(m.id);
         }
       }
       messages = data.messages;
       pending = pending.filter(p =>
         !messages.some(m => m.sender === p.sender && m.text === p.text));
-      setStatus('ok', 'Online · ' + messages.length + ' messages');
+      if (Array.isArray(data.presence)) applyPresence(data.presence);
+      setStatus('ok', onlineCount() + ' online · ' + messages.length + ' messages');
       render();
       if (Array.isArray(data.signals)) processSignals(data.signals, myName);
+      updateReceipts();
+      refreshPeoplePanel();
       if (newFromOthers) playReceive();
+      if (mentionedBy) showNotice('💬 ' + mentionedBy + ' mentioned you', false);
       firstLoad = false;
     } else {
       setStatus('err', 'Sheet replied but sent no data');
@@ -528,8 +584,10 @@ async function send() {
   const sender = getName();
   inputEl.value = '';
   inputEl.style.height = 'auto';
+  hideMentionPop();
   pending.push({ sender, text, timestamp: new Date().toISOString(), pending: true });
   render();
+  scrollToBottom();
   playSend();
 
   try {
@@ -591,7 +649,8 @@ function buildRow(item) {
     audio.src = m.text.slice(VOICE_PREFIX.length);
     bubble.append(audio);
   } else {
-    bubble.textContent = m.text;
+    bubble.innerHTML = renderText(m.text);
+    if (!mine && textMentionsMe(m.text)) bubble.classList.add('mentionme');
   }
   stack.append(bubble);
 
@@ -599,6 +658,11 @@ function buildRow(item) {
   meta.className = 'meta';
   meta.textContent = (isVoice ? '🎤 Voice note · ' : '') +
     fmtTime(m.timestamp) + (m.pending ? ' · sending…' : '');
+  if (mine) {
+    const rc = document.createElement('span');
+    rc.className = 'receipt';
+    meta.append(rc);
+  }
   stack.append(meta);
 
   if (isVoice) {
@@ -618,6 +682,7 @@ function render() {
   const all = messages.concat(pending);
   const myName = getName();
   const empty = document.getElementById('empty');
+  const wasAtBottom = isAtBottom();
 
   if (all.length === 0) {
     chatEl.querySelectorAll('.row').forEach(n => n.remove());
@@ -665,7 +730,11 @@ function render() {
     chatEl.appendChild(node);  // appendChild also re-orders existing nodes
     anchor = node;
   }
-  chatEl.scrollTop = chatEl.scrollHeight;
+  if (wasAtBottom) {
+    scrollToBottom();
+    if (myReadCount !== messages.length) { myReadCount = messages.length; schedulePresence(); }
+  }
+  updateJumpBtn();
 }
 
 /* ===================================================================
@@ -688,8 +757,10 @@ function readAll() {
     speechSynthesis.speak(u);
   }
 }
-document.getElementById('readAllBtn').addEventListener('click', readAll);
-document.getElementById('stopSpeakBtn').addEventListener('click', () => speechSynthesis.cancel());
+document.getElementById('readAllBtn').addEventListener('click', () => {
+  if (window.speechSynthesis && speechSynthesis.speaking) speechSynthesis.cancel();
+  else readAll();
+});
 
 /* ===================================================================
    DICTATION — English speech to text. No audio is ever stored.
@@ -853,6 +924,7 @@ async function sendVoiceNote(dataUrl) {
   const text = VOICE_PREFIX + dataUrl;
   pending.push({ sender, text, timestamp: new Date().toISOString(), pending: true });
   render();
+  scrollToBottom();
   playSend();
   try {
     await fetch(url, {
@@ -1268,15 +1340,238 @@ callBtn.addEventListener('click', () => {
 });
 
 /* ===================================================================
+   PRESENCE · PEOPLE · READ RECEIPTS · MENTIONS · SCROLLING
+   =================================================================== */
+const peopleBtn     = document.getElementById('peopleBtn');
+const peopleOverlay = document.getElementById('peopleOverlay');
+const peopleCard    = document.getElementById('peopleCard');
+const jumpBtn       = document.getElementById('jumpBtn');
+const mentionPop    = document.getElementById('mentionPop');
+
+let presence = {};        // name -> { lastSeen(ms), readUpTo(int) }
+let myReadCount = 0;      // how many confirmed messages I have seen
+let presenceTimer = null, presenceDebounce = null;
+
+/* ---- presence (online / offline) ---- */
+async function postPresenceNow() {
+  const url = getUrl();
+  if (!url || !getName()) return;
+  try {
+    await fetch(url, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ type: 'presence', name: getName(), readUpTo: myReadCount })
+    });
+  } catch (e) {}
+}
+function schedulePresence() {
+  clearTimeout(presenceDebounce);
+  presenceDebounce = setTimeout(postPresenceNow, 700);
+}
+function applyPresence(arr) {
+  const p = {};
+  for (const r of arr) {
+    if (!r || !r.name) continue;
+    p[r.name] = {
+      lastSeen: new Date(r.lastSeen).getTime() || 0,
+      readUpTo: parseInt(r.readUpTo, 10) || 0
+    };
+  }
+  presence = p;
+}
+function isOnline(name) {
+  const p = presence[name];
+  return !!p && (Date.now() - p.lastSeen < 30000);
+}
+function onlineCount() {
+  let c = 0;
+  for (const n in presence) if (isOnline(n)) c++;
+  return c;
+}
+function agoText(ms) {
+  if (!ms) return 'a while ago';
+  const s = Math.floor((Date.now() - ms) / 1000);
+  if (s < 60) return s + 's ago';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+/* ---- known participant names (mentions + people list) ---- */
+function knownNames() {
+  const set = {};
+  for (const m of messages) if (m.sender) set[m.sender] = 1;
+  for (const m of pending)  if (m.sender) set[m.sender] = 1;
+  for (const n in presence) set[n] = 1;
+  const me = getName(); if (me) set[me] = 1;
+  return Object.keys(set);
+}
+
+/* ---- people panel ---- */
+function showPeople() {
+  const me = getName();
+  const names = knownNames().filter(Boolean).sort((a, b) => {
+    const d = (isOnline(a) ? 0 : 1) - (isOnline(b) ? 0 : 1);
+    return d !== 0 ? d : a.toLowerCase().localeCompare(b.toLowerCase());
+  });
+  let rows = '';
+  for (const n of names) {
+    const on = isOnline(n);
+    const p = presence[n];
+    const sub = on ? 'online' : (p ? 'last seen ' + agoText(p.lastSeen) : 'offline');
+    rows += '<div class="partitem">' +
+      '<span class="pstatus' + (on ? ' on' : '') + '"></span>' +
+      '<span style="flex:1">' + escapeHtml(n) + (n === me ? ' (you)' : '') + '</span>' +
+      '<span class="psub">' + sub + '</span></div>';
+  }
+  if (!rows) rows = '<div class="cstate" style="margin-top:8px">No one here yet.</div>';
+  peopleCard.innerHTML =
+    '<div class="cicon">👥</div>' +
+    '<div class="cwho">People in this chat</div>' +
+    '<div class="cstate">' + onlineCount() + ' online now</div>' +
+    '<div class="peoplelist">' + rows + '</div>' +
+    '<div class="callbtns"><button class="callbtn hang" id="pClose" title="Close">✕</button></div>';
+  peopleOverlay.classList.add('show');
+  peopleCard.querySelector('#pClose').onclick = () => peopleOverlay.classList.remove('show');
+}
+function refreshPeoplePanel() {
+  if (peopleOverlay.classList.contains('show')) showPeople();
+}
+peopleBtn.addEventListener('click', () => {
+  if (peopleOverlay.classList.contains('show')) peopleOverlay.classList.remove('show');
+  else showPeople();
+});
+
+/* ---- read receipts (shown on my own messages) ---- */
+function updateReceipts() {
+  const me = getName();
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.sender !== me) continue;
+    const row = chatEl.querySelector('.row[data-key="m:' + m.id + '"]');
+    if (!row) continue;
+    const rc = row.querySelector('.receipt');
+    if (!rc) continue;
+    const readers = [];
+    for (const name in presence) {
+      if (name !== me && presence[name].readUpTo > i) readers.push(name);
+    }
+    if (readers.length === 0) {
+      rc.className = 'receipt';
+      rc.textContent = ' · ✓ Sent';
+    } else {
+      rc.className = 'receipt read';
+      rc.textContent = ' · ✓✓ Read by ' +
+        (readers.length <= 3 ? readers.join(', ') : readers.length + ' people');
+    }
+  }
+}
+
+/* ---- mentions ---- */
+function regexEscape(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function renderText(text) {
+  let html = escapeHtml(text);
+  const names = knownNames().filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!names.length) return html;
+  const myEsc = escapeHtml(getName());
+  try {
+    const re = new RegExp('@(' + names.map(n => regexEscape(escapeHtml(n))).join('|') + ')(?![\\w])', 'g');
+    html = html.replace(re, (full, nm) =>
+      '<span class="mention' + (nm === myEsc ? ' me' : '') + '">' + full + '</span>');
+  } catch (e) {}
+  return html;
+}
+function textMentionsMe(text) {
+  const me = getName();
+  if (!me) return false;
+  try { return new RegExp('@' + regexEscape(me) + '(?![\\w])').test(text); }
+  catch (e) { return text.indexOf('@' + me) !== -1; }
+}
+
+/* mention autocomplete popup */
+let mentionMatches = [], mentionSel = 0, mentionStart = -1;
+function updateMentionPop() {
+  const before = inputEl.value.slice(0, inputEl.selectionStart);
+  const m = before.match(/@([^\s@]*)$/);
+  if (!m) { hideMentionPop(); return; }
+  mentionStart = before.length - m[0].length;
+  const partial = m[1].toLowerCase();
+  const me = getName();
+  mentionMatches = knownNames().filter(n =>
+    n && n !== me && n.toLowerCase().indexOf(partial) === 0).slice(0, 6);
+  if (!mentionMatches.length) { hideMentionPop(); return; }
+  mentionSel = 0;
+  renderMentionPop();
+}
+function renderMentionPop() {
+  mentionPop.innerHTML = mentionMatches.map((n, i) =>
+    '<button class="mentionitem' + (i === mentionSel ? ' sel' : '') + '" data-i="' + i + '">' +
+    '<span class="ndot" style="background:' + nameColor(n) + '"></span>' +
+    escapeHtml(n) + '</button>').join('');
+  mentionPop.classList.add('show');
+  mentionPop.querySelectorAll('.mentionitem').forEach(b => {
+    b.addEventListener('mousedown', e => { e.preventDefault(); pickMention(+b.dataset.i); });
+  });
+}
+function hideMentionPop() { mentionPop.classList.remove('show'); mentionMatches = []; mentionStart = -1; }
+function pickMention(i) {
+  const name = mentionMatches[i];
+  if (name == null || mentionStart < 0) return;
+  const val = inputEl.value;
+  const cur = inputEl.selectionStart;
+  inputEl.value = val.slice(0, mentionStart) + '@' + name + ' ' + val.slice(cur);
+  const pos = mentionStart + name.length + 2;
+  hideMentionPop();
+  inputEl.focus();
+  inputEl.setSelectionRange(pos, pos);
+  autoGrow();
+}
+
+/* ---- smart scrolling ---- */
+function isAtBottom() {
+  return chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60;
+}
+function scrollToBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
+function updateJumpBtn() {
+  jumpBtn.classList.toggle('show', !isAtBottom() && (messages.length + pending.length) > 0);
+}
+function markRead() {
+  if (messages.length && isAtBottom() && myReadCount !== messages.length) {
+    myReadCount = messages.length;
+    schedulePresence();
+  }
+}
+chatEl.addEventListener('scroll', () => { updateJumpBtn(); markRead(); });
+jumpBtn.addEventListener('click', () => {
+  chatEl.scrollTo({ top: chatEl.scrollHeight, behavior: 'smooth' });
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) postPresenceNow();
+});
+
+/* ===================================================================
    COMPOSER
    =================================================================== */
 function autoGrow() {
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 150) + 'px';
 }
-inputEl.addEventListener('input', autoGrow);
+inputEl.addEventListener('input', () => { autoGrow(); updateMentionPop(); });
+inputEl.addEventListener('blur', () => setTimeout(hideMentionPop, 150));
 document.getElementById('sendBtn').addEventListener('click', send);
 inputEl.addEventListener('keydown', (e) => {
+  if (mentionPop.classList.contains('show') && mentionMatches.length) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); mentionSel = (mentionSel + 1) % mentionMatches.length; renderMentionPop(); return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault(); mentionSel = (mentionSel - 1 + mentionMatches.length) % mentionMatches.length; renderMentionPop(); return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionSel); return; }
+    if (e.key === 'Escape') { e.preventDefault(); hideMentionPop(); return; }
+  }
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
 
@@ -1286,6 +1581,8 @@ if (!getName()) {
 } else {
   poll();
   pollTimer = setInterval(poll, POLL_MS);
+  postPresenceNow();
+  presenceTimer = setInterval(postPresenceNow, 12000);
 }
 </script>
 </body>
