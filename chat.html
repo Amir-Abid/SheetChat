@@ -336,9 +336,12 @@
    CONFIG — fill these two in before sending the file to anyone.
    There is no settings screen, so this is the only place to set them.
    =================================================================== */
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwYiPM69KKryd_bPTdPzSD40fyhdyjKoHWNzkZlI1X8VWS3wCp2HntHB48_fnPOf-28GA/exec";   // <-- paste your Apps Script /exec URL between the quotes
+const WEB_APP_URL = "";   // <-- paste your Apps Script /exec URL between the quotes
 
-const PRESET_NAME = "";   // <-- type this person's name, e.g. "Amir Khan"
+/* PRESET_NAME is just a fallback. The real name should come from each
+   person's link: e.g.  https://you.github.io/mychat/index.html?name=Amir
+   Leave PRESET_NAME empty when the chat is hosted on a shared link. */
+const PRESET_NAME = "";
 
 const POLL_MS = 3500;
 const VOICE_PREFIX = '[[VOICE]]';   // marks a message that holds an encoded voice note
@@ -359,7 +362,14 @@ const soundBtn = document.getElementById('soundBtn');
 
 /* ---- identity (set via the constants at the top of this file) ---- */
 function getUrl()  { return (WEB_APP_URL || '').trim(); }
-function getName() { return (PRESET_NAME || '').trim() || 'Me'; }
+/* The name comes from the link, e.g.  index.html?name=Amir
+   so one hosted file gives each person their own identity.
+   Falls back to PRESET_NAME, then to 'Me'. */
+function getName() {
+  let n = '';
+  try { n = new URLSearchParams(location.search).get('name') || ''; } catch (e) {}
+  return (n || PRESET_NAME || '').trim() || 'Me';
+}
 
 soundBtn.classList.toggle('on', soundOn);
 soundBtn.textContent = soundOn ? '🔔' : '🔕';
