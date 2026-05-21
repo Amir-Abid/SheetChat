@@ -411,7 +411,7 @@
    CONFIG — fill these two in before sending the file to anyone.
    There is no settings screen, so this is the only place to set them.
    =================================================================== */
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycby6CP44Ld2eGzdwei5Xh_pu_jVhbA1_kyH1qC02i5ZBXUgbVSY8M9LpGKC_GnYfUO1R-g/exec";   // <-- paste your Apps Script /exec URL between the quotes
+const WEB_APP_URL = "";   // <-- paste your Apps Script /exec URL between the quotes
 
 /* PRESET_NAME is just a fallback. The real name should come from each
    person's link: e.g.  https://you.github.io/mychat/index.html?name=Amir
@@ -952,23 +952,16 @@ const callBtn = document.getElementById('callBtn');
 const callOverlay = document.getElementById('callOverlay');
 const callCard = document.getElementById('callCard');
 const callAudios = document.getElementById('callAudios');
-/* STUN finds each device's public address; TURN relays the audio when the
-   two networks cannot reach each other directly (common on mobile data and
-   office Wi-Fi). The free TURN below works for light use — for rock-solid
-   reliability, get your own free credentials at
-   https://www.metered.ca/tools/openrelay/  and replace them here. */
+/* STUN lets two devices discover each other across networks and handles
+   most connections. Some strict networks (certain mobile / office setups)
+   also need a TURN relay — if you need that, get your OWN working TURN
+   credentials (e.g. a free account at metered.ca) and uncomment the line
+   below. Do NOT add a dead or unreliable public TURN server: a relay that
+   does not work only slows down and destabilises calls. */
 const rtcConfig = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  {
-    urls: [
-      'turn:openrelay.metered.ca:80',
-      'turn:openrelay.metered.ca:443',
-      'turn:openrelay.metered.ca:443?transport=tcp'
-    ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  }
+  { urls: 'stun:stun1.l.google.com:19302' }
+  // ,{ urls: 'turn:YOUR_TURN_HOST:443', username: 'YOUR_USERNAME', credential: 'YOUR_PASSWORD' }
 ]};
 
 let callState = 'idle';        // idle | ringing | incall
@@ -1000,9 +993,9 @@ function waitForIce(p) {
       }
     };
     p.addEventListener('icegatheringstatechange', check);
-    // give STUN/TURN time to gather public + relay candidates — too short
-    // and a cross-network call is sent with only useless local addresses.
-    setTimeout(resolve, 8000);
+    // fallback if the browser never reports 'complete' — STUN normally
+    // finishes gathering well before this.
+    setTimeout(resolve, 5000);
   });
 }
 
