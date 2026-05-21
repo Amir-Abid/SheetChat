@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>SheetChat</title>
+<style>
+  :root {
+    --accent: #6c8cff;
+    --accent-2: #8a6cff;
+    --mine-1: #6c8cff;
+    --mine-2: #7d6cff;
+    --text: #eef1f8;
+    --muted: #9aa0b4;
+    --glass: rgba(28, 31, 44, 0.72);
+    --glass-2: rgba(40, 44, 60, 0.85);
+    --border: rgba(255, 255, 255, 0.08);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    color: var(--text);
+    background: #0b0d16;
+    display: flex; flex-direction: column;
+    height: 100vh; height: 100dvh;
+    overflow: hidden;
+    transition: background .25s;
+  }
+  body.light {
+    --text: #1c2233;
+    --muted: #6b7184;
+    --glass: rgba(255,255,255,0.82);
+    --glass-2: rgba(255,255,255,0.95);
+    --border: rgba(0,0,0,0.10);
+    background: #e7ebf5;
+  }
+  body.light .blob { opacity: 0.26; }
+  body.light .bubble { box-shadow: 0 4px 14px rgba(0,0,0,0.10); }
+  body.light #chat::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); }
+
+  /* animated background blobs */
+  .blob {
+    position: fixed; border-radius: 50%; filter: blur(90px);
+    opacity: 0.55; z-index: -1; pointer-events: none;
+  }
+  .blob.b1 { width: 480px; height: 480px; background: #3b4cff; top: -160px; left: -120px;
+             animation: float1 18s ease-in-out infinite; }
+  .blob.b2 { width: 420px; height: 420px; background: #8a3bff; bottom: -160px; right: -120px;
+             animation: float2 22s ease-in-out infinite; }
+  .blob.b3 { width: 360px; height: 360px; background: #1f9bff; bottom: 40%; left: 45%;
+             animation: float1 26s ease-in-out infinite; }
+  @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(60px,80px)} }
+  @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-70px,-60px)} }
+
+  /* header */
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px; background: var(--glass);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid var(--border); z-index: 5;
+  }
+  .logo {
+    width: 40px; height: 40px; border-radius: 13px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center; font-size: 20px;
+    box-shadow: 0 6px 18px rgba(108,140,255,0.45);
+  }
+  .title { flex: 1; min-width: 0; }
+  .title h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  .title .status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .pulse {
+    width: 8px; height: 8px; border-radius: 50%; background: #555;
+  }
+  .pulse.ok { background: #38d39f; box-shadow: 0 0 0 0 rgba(56,211,159,0.6);
+              animation: pulse 2s infinite; }
+  .pulse.err { background: #ff5d52; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(56,211,159,0.55); }
+    70% { box-shadow: 0 0 0 9px rgba(56,211,159,0); }
+    100% { box-shadow: 0 0 0 0 rgba(56,211,159,0); }
+  }
+
+  .iconbtn {
+    width: 40px; height: 40px; border-radius: 12px; flex: none;
+    background: var(--glass-2); border: 1px solid var(--border);
+    color: var(--text); cursor: pointer; font-size: 17px;
+    display: grid; place-items: center; transition: transform .12s, background .15s;
+  }
+  .iconbtn:hover { background: rgba(255,255,255,0.12); }
+  .iconbtn:active { transform: scale(0.92); }
+  .iconbtn.on { background: linear-gradient(135deg, var(--accent), var(--accent-2));
+                border-color: transparent; }
+
+  /* notice / permission banner */
+  @keyframes drop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; } }
+  #notice {
+    display: none; align-items: center; gap: 10px;
+    padding: 11px 16px; font-size: 13px; line-height: 1.45;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+  }
+  #notice.show { display: flex; animation: drop .2s ease; }
+  #notice span { flex: 1; }
+  #notice button {
+    background: rgba(255,255,255,0.25); border: none; color: #fff; flex: none;
+    width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 13px;
+  }
+
+  /* chat area */
+  #chat {
+    flex: 1; overflow-y: auto; padding: 20px 18px 8px;
+    display: flex; flex-direction: column; gap: 3px;
+    scroll-behavior: smooth;
+  }
+  #chat::-webkit-scrollbar { width: 8px; }
+  #chat::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; }
+
+  .row { display: flex; gap: 9px; align-items: flex-end; margin-top: 2px; }
+  .row.mine { flex-direction: row-reverse; }
+  .row.grouped { margin-top: 0; }
+
+  .stack { display: flex; flex-direction: column; max-width: 74%; }
+  .row.mine .stack { align-items: flex-end; }
+
+  .sender {
+    font-size: 12px; margin: 8px 6px 3px; font-weight: 700;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sender .ndot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+  .bubble {
+    position: relative; padding: 10px 14px; border-radius: 18px;
+    line-height: 1.45; white-space: pre-wrap; word-wrap: break-word;
+    font-size: 14.5px; animation: pop .26s cubic-bezier(.18,.9,.32,1.2);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.92); } }
+  .row.theirs .bubble {
+    background: var(--glass-2); border: 1px solid var(--border);
+    border-bottom-left-radius: 6px;
+  }
+  .row.mine .bubble {
+    background: linear-gradient(135deg, var(--mine-1), var(--mine-2));
+    border-bottom-right-radius: 6px;
+  }
+  .row.grouped.theirs .bubble { border-top-left-radius: 8px; }
+  .row.grouped.mine .bubble { border-top-right-radius: 8px; }
+  .bubble.pending { opacity: 0.55; }
+  .row.mine .bubble.voice, .row.theirs .bubble.voice {
+    background: var(--glass-2); border: 1px solid var(--border); padding: 7px 9px;
+  }
+  .bubble.voice audio { display: block; width: 232px; height: 40px; }
+
+  .meta {
+    margin: 3px 6px 0;
+    font-size: 10.5px; color: var(--muted); opacity: 0; transition: opacity .15s;
+  }
+  .stack:hover .meta { opacity: 1; }
+  .msgspeak {
+    width: 30px; height: 30px; flex: none; align-self: flex-end;
+    margin-bottom: 2px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--glass-2); color: var(--accent); cursor: pointer;
+    font-size: 13px; display: grid; place-items: center;
+    transition: transform .12s, background .15s;
+  }
+  .msgspeak:hover { background: rgba(255,255,255,0.14); }
+  .msgspeak:active { transform: scale(0.85); }
+
+  #empty {
+    margin: auto; text-align: center; color: var(--muted);
+  }
+  #empty .big { font-size: 44px; margin-bottom: 8px; }
+
+  /* composer */
+  #composer {
+    display: flex; gap: 9px; align-items: flex-end;
+    padding: 12px 16px max(16px, env(safe-area-inset-bottom)); background: var(--glass);
+    backdrop-filter: blur(18px); border-top: 1px solid var(--border);
+  }
+  .circlebtn {
+    width: 46px; height: 46px; flex: none; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--glass-2);
+    color: var(--text); cursor: pointer; font-size: 18px;
+    display: grid; place-items: center; transition: transform .12s, background .15s;
+  }
+  .circlebtn:hover { background: rgba(255,255,255,0.12); }
+  .circlebtn:active { transform: scale(0.9); }
+  .circlebtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .circlebtn.listening {
+    background: linear-gradient(135deg, #ff5d7a, #ff3b6b); border-color: transparent;
+    animation: micpulse 1.3s infinite;
+  }
+  @keyframes micpulse {
+    0% { box-shadow: 0 0 0 0 rgba(255,59,107,0.6); }
+    70% { box-shadow: 0 0 0 14px rgba(255,59,107,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,59,107,0); }
+  }
+
+  .inputwrap { flex: 1; }
+  #input {
+    width: 100%; resize: none; min-height: 46px; max-height: 150px;
+    background: var(--glass-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 23px; padding: 12px 18px;
+    font-size: 15px; font-family: inherit; line-height: 1.4; outline: none;
+    transition: border-color .15s;
+  }
+  #input:focus { border-color: var(--accent); }
+
+  #sendBtn {
+    width: 46px; height: 46px; flex: none; border-radius: 50%;
+    border: none; cursor: pointer; font-size: 19px; color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+    box-shadow: 0 6px 18px rgba(108,140,255,0.5);
+    transition: transform .12s;
+  }
+  #sendBtn:hover { transform: scale(1.06); }
+  #sendBtn:active { transform: scale(0.9); }
+
+  /* voice call */
+  #callOverlay {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.55);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  }
+  #callOverlay.show { display: flex; }
+  .callcard {
+    background: var(--glass-2); border: 1px solid var(--border);
+    border-radius: 22px; padding: 28px 24px; width: 304px; max-width: 86vw;
+    text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+    animation: pop .22s cubic-bezier(.18,.9,.32,1.2);
+  }
+  .cicon { font-size: 46px; line-height: 1; }
+  .pulse-ring { display: inline-block; animation: ringpulse 1.3s infinite; }
+  @keyframes ringpulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.13)} }
+  .cwho { font-size: 19px; font-weight: 700; margin: 12px 0 3px; }
+  .cstate { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .callbtns { display: flex; gap: 16px; justify-content: center; margin-top: 22px; }
+  .callbtn {
+    width: 58px; height: 58px; border-radius: 50%; border: none;
+    cursor: pointer; font-size: 22px; color: #fff;
+    display: grid; place-items: center; transition: transform .12s;
+  }
+  .callbtn:active { transform: scale(0.9); }
+  .callbtn.accept { background: linear-gradient(135deg,#36d97a,#1fae58); }
+  .callbtn.hang   { background: linear-gradient(135deg,#ff6b5e,#e0392b); }
+  .callbtn.mute   { background: var(--glass); border: 1px solid var(--border); color: var(--text); }
+  .callbtn.mute.on{ background: linear-gradient(135deg,#ffae3b,#e0851f); color: #fff; }
+  .pickerlist {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-top: 16px; max-height: 220px; overflow-y: auto;
+  }
+  .pickeritem {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 14px; border-radius: 12px; background: var(--glass);
+    border: 1px solid var(--border); color: var(--text);
+    cursor: pointer; font-weight: 600; font-size: 14px; text-align: left;
+  }
+  .pickeritem:hover { background: rgba(255,255,255,0.12); }
+  .pickeritem input { accent-color: var(--accent); width: 17px; height: 17px; flex: none; }
+  .joinbtn {
+    display: block; width: 100%; margin-top: 14px; padding: 11px;
+    border-radius: 12px; border: none; cursor: pointer;
+    font-weight: 700; font-size: 14px; color: #fff;
+    background: linear-gradient(135deg,#36d97a,#1fae58);
+  }
+  .partlist {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-top: 14px; max-height: 184px; overflow-y: auto;
+  }
+  .partitem {
+    display: flex; align-items: center; gap: 9px; padding: 8px 11px;
+    background: var(--glass); border: 1px solid var(--border);
+    border-radius: 11px; font-size: 13.5px; font-weight: 600; text-align: left;
+  }
+  .pstatus { width: 8px; height: 8px; border-radius: 50%; flex: none; background: #e0a73b; }
+  .pstatus.on { background: #38d39f; }
+
+  /* ---- phone / small screens ---- */
+  @media (max-width: 600px) {
+    header { padding: 9px 10px; gap: 6px; }
+    .logo { width: 34px; height: 34px; font-size: 17px; border-radius: 10px; }
+    .title h1 { font-size: 15px; }
+    .title .status { font-size: 11px; }
+    .iconbtn { width: 34px; height: 34px; font-size: 14px; border-radius: 9px; }
+    #chat { padding: 14px 11px 6px; }
+    .stack { max-width: 86%; }
+    .bubble { font-size: 15px; }
+    .bubble.voice audio { width: 196px; }
+    .meta { opacity: 1; }                /* touch screens have no hover */
+    #composer { gap: 7px; padding: 9px 9px max(12px, env(safe-area-inset-bottom)); }
+    .circlebtn, #sendBtn { width: 44px; height: 44px; font-size: 17px; }
+    #input { font-size: 16px; min-height: 44px; padding: 11px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+<header>
+  <div class="logo">💬</div>
+  <div class="title">
+    <h1>SheetChat</h1>
+    <div class="status"><span id="pulse" class="pulse"></span><span id="statusText">Connecting…</span></div>
+  </div>
+  <button class="iconbtn" id="callBtn" title="Start a voice call">📞</button>
+  <button class="iconbtn" id="soundBtn" title="Toggle sounds">🔔</button>
+  <button class="iconbtn" id="readAllBtn" title="Read all messages aloud">🔊</button>
+  <button class="iconbtn" id="stopSpeakBtn" title="Stop reading">⏹</button>
+  <button class="iconbtn" id="themeBtn" title="Light / dark mode">🌙</button>
+  <button class="iconbtn" id="fullscreenBtn" title="Full screen">⛶</button>
+</header>
+
+<div id="chat">
+  <div id="empty"><div class="big">💭</div>No messages yet — say hello!</div>
+</div>
+
+<div id="notice"><span id="noticeText"></span><button id="noticeClose" title="Dismiss">✕</button></div>
+
+<div id="composer">
+  <button class="circlebtn" id="micBtn" title="Dictate (speech to text)">🎤</button>
+  <button class="circlebtn" id="recordBtn" title="Record a voice note">⏺</button>
+  <div class="inputwrap">
+    <textarea id="input" placeholder="Type a message, or tap the mic to speak…"></textarea>
+  </div>
+  <button id="sendBtn" title="Send">➤</button>
+</div>
+
+<div id="callAudios" style="display:none"></div>
+<div id="callOverlay"><div class="callcard" id="callCard"></div></div>
+
+<script>
+/* ===================================================================
+   CONFIG — fill these two in before sending the file to anyone.
+   There is no settings screen, so this is the only place to set them.
+   =================================================================== */
+const WEB_APP_URL = "";   // <-- paste your Apps Script /exec URL between the quotes
+
+const PRESET_NAME = "";   // <-- type this person's name, e.g. "Amir Khan"
+
+const POLL_MS = 3500;
+const VOICE_PREFIX = '[[VOICE]]';   // marks a message that holds an encoded voice note
+let messages = [];        // confirmed messages from the sheet
+let pending = [];         // sent locally, not yet echoed back from the sheet
+let seenIds = new Set();        // message ids already known (for new-message sound)
+let seenSignalIds = new Set();  // call-signaling rows already processed
+let pollTimer = null;
+let firstLoad = true;
+let soundOn = localStorage.getItem('sheetchat_sound') !== 'off';
+
+/* ---- elements ---- */
+const chatEl = document.getElementById('chat');
+const inputEl = document.getElementById('input');
+const pulseEl = document.getElementById('pulse');
+const statusText = document.getElementById('statusText');
+const soundBtn = document.getElementById('soundBtn');
+
+/* ---- identity (set via the constants at the top of this file) ---- */
+function getUrl()  { return (WEB_APP_URL || '').trim(); }
+function getName() { return (PRESET_NAME || '').trim() || 'Me'; }
+
+soundBtn.classList.toggle('on', soundOn);
+soundBtn.textContent = soundOn ? '🔔' : '🔕';
+
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  localStorage.setItem('sheetchat_sound', soundOn ? 'on' : 'off');
+  soundBtn.classList.toggle('on', soundOn);
+  soundBtn.textContent = soundOn ? '🔔' : '🔕';
+  if (soundOn) playSend();
+});
+
+/* ---- light / dark theme ---- */
+const themeBtn = document.getElementById('themeBtn');
+function applyTheme(t) {
+  document.body.classList.toggle('light', t === 'light');
+  themeBtn.textContent = t === 'light' ? '☀️' : '🌙';
+}
+applyTheme(localStorage.getItem('sheetchat_theme') || 'dark');
+themeBtn.addEventListener('click', () => {
+  const t = document.body.classList.contains('light') ? 'dark' : 'light';
+  localStorage.setItem('sheetchat_theme', t);
+  applyTheme(t);
+});
+
+/* ---- full screen ---- */
+const fsBtn = document.getElementById('fullscreenBtn');
+fsBtn.addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  fsBtn.classList.toggle('on', !!document.fullscreenElement);
+});
+
+function setStatus(kind, text) {
+  pulseEl.className = 'pulse' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : '');
+  statusText.textContent = text;
+}
+
+/* ---- notice / permission banner ---- */
+const noticeEl = document.getElementById('notice');
+const noticeText = document.getElementById('noticeText');
+let noticeTimer = null;
+function showNotice(text, sticky) {
+  noticeText.textContent = text;
+  noticeEl.classList.add('show');
+  clearTimeout(noticeTimer);
+  if (!sticky) noticeTimer = setTimeout(hideNotice, 6000);
+}
+function hideNotice() {
+  noticeEl.classList.remove('show');
+  clearTimeout(noticeTimer);
+}
+document.getElementById('noticeClose').addEventListener('click', hideNotice);
+
+/* ===================================================================
+   SOUNDS — synthesised, no audio files needed
+   =================================================================== */
+let audioCtx;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function tone(freqStart, freqEnd, start, dur, vol) {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(freqStart, audioCtx.currentTime + start);
+  o.frequency.exponentialRampToValueAtTime(freqEnd, audioCtx.currentTime + start + dur);
+  g.gain.setValueAtTime(0.0001, audioCtx.currentTime + start);
+  g.gain.exponentialRampToValueAtTime(vol, audioCtx.currentTime + start + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + start + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(audioCtx.currentTime + start);
+  o.stop(audioCtx.currentTime + start + dur + 0.02);
+}
+function playSend() {
+  if (!soundOn) return;
+  try { ensureAudio(); tone(420, 720, 0, 0.14, 0.18); } catch (e) {}
+}
+function playReceive() {
+  if (!soundOn) return;
+  try { ensureAudio(); tone(660, 660, 0, 0.13, 0.16); tone(880, 880, 0.12, 0.16, 0.16); } catch (e) {}
+}
+
+/* ===================================================================
+   SYNC — read the whole history from the sheet
+   =================================================================== */
+async function poll() {
+  const url = getUrl();
+  if (!url) { setStatus('err', 'WEB_APP_URL is not set in the file'); return; }
+  try {
+    const res = await fetch(url + '?t=' + Date.now());
+    const data = await res.json();
+    if (data && data.ok && Array.isArray(data.messages)) {
+      const myName = getName();
+      let newFromOthers = false;
+      for (const m of data.messages) {
+        if (!seenIds.has(m.id)) {
+          if (!firstLoad && m.sender !== myName) newFromOthers = true;
+          seenIds.add(m.id);
+        }
+      }
+      messages = data.messages;
+      pending = pending.filter(p =>
+        !messages.some(m => m.sender === p.sender && m.text === p.text));
+      setStatus('ok', 'Online · ' + messages.length + ' messages');
+      render();
+      if (Array.isArray(data.signals)) processSignals(data.signals, myName);
+      if (newFromOthers) playReceive();
+      firstLoad = false;
+    } else {
+      setStatus('err', 'Sheet replied but sent no data');
+    }
+  } catch (err) {
+    setStatus('err', 'Cannot reach the sheet — check the URL');
+  }
+}
+
+/* ===================================================================
+   SEND
+   =================================================================== */
+async function send() {
+  const text = inputEl.value.trim();
+  const url = getUrl();
+  if (!text) return;
+  if (!url) { setStatus('err', 'WEB_APP_URL is not set in the file'); return; }
+
+  const sender = getName();
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  pending.push({ sender, text, timestamp: new Date().toISOString(), pending: true });
+  render();
+  playSend();
+
+  try {
+    await fetch(url, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ sender, text })
+    });
+  } catch (err) {
+    setStatus('err', 'Send may have failed — will retry on sync');
+  }
+  setTimeout(poll, 900);
+  setTimeout(poll, 2500);
+}
+
+/* ===================================================================
+   RENDER  (incremental so bubbles animate in nicely)
+   =================================================================== */
+function nameColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return 'hsl(' + h + ',60%,55%)';
+}
+function fmtTime(ts) {
+  const d = ts ? new Date(ts) : null;
+  if (!d || isNaN(d)) return '';
+  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function buildRow(item) {
+  const { m, mine, grouped } = item;
+  const row = document.createElement('div');
+  row.className = 'row ' + (mine ? 'mine' : 'theirs') + (grouped ? ' grouped' : '');
+  row.dataset.key = item.key;
+
+  const stack = document.createElement('div');
+  stack.className = 'stack';
+
+  if (!grouped) {
+    const s = document.createElement('div');
+    s.className = 'sender';
+    const ndot = document.createElement('span');
+    ndot.className = 'ndot';
+    ndot.style.background = nameColor(m.sender);
+    const nm = document.createElement('span');
+    nm.style.color = nameColor(m.sender);
+    nm.textContent = mine ? m.sender + ' (you)' : m.sender;
+    s.append(ndot, nm);
+    stack.append(s);
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble' + (m.pending ? ' pending' : '');
+  const isVoice = m.text.indexOf(VOICE_PREFIX) === 0;
+  if (isVoice) {
+    bubble.classList.add('voice');
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.src = m.text.slice(VOICE_PREFIX.length);
+    bubble.append(audio);
+  } else {
+    bubble.textContent = m.text;
+  }
+  stack.append(bubble);
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = (isVoice ? '🎤 Voice note · ' : '') +
+    fmtTime(m.timestamp) + (m.pending ? ' · sending…' : '');
+  stack.append(meta);
+
+  if (isVoice) {
+    row.append(stack);
+  } else {
+    const speak = document.createElement('button');
+    speak.className = 'msgspeak';
+    speak.textContent = '🔊';
+    speak.title = 'Read this message aloud';
+    speak.addEventListener('click', () => speakOne(m.text));
+    row.append(stack, speak);
+  }
+  return row;
+}
+
+function render() {
+  const all = messages.concat(pending);
+  const myName = getName();
+  const empty = document.getElementById('empty');
+
+  if (all.length === 0) {
+    chatEl.querySelectorAll('.row').forEach(n => n.remove());
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  const desired = all.map((m, i) => {
+    const prev = all[i - 1];
+    return {
+      key: m.id ? 'm:' + m.id : 'p:' + m.sender + ':' + m.text,
+      m, mine: m.sender === myName,
+      grouped: !!prev && prev.sender === m.sender
+    };
+  });
+  const desiredKeys = new Set(desired.map(d => d.key));
+
+  // remove rows that are no longer wanted
+  chatEl.querySelectorAll('.row').forEach(node => {
+    if (!desiredKeys.has(node.dataset.key)) node.remove();
+  });
+
+  const existing = {};
+  chatEl.querySelectorAll('.row').forEach(n => existing[n.dataset.key] = n);
+
+  let anchor = null;
+  for (const item of desired) {
+    let node = existing[item.key];
+    if (!node) {
+      // reuse a matching pending bubble so confirmed messages don't flicker
+      const reuseKey = 'p:' + item.m.sender + ':' + item.m.text;
+      if (item.m.id && existing[reuseKey]) {
+        node = existing[reuseKey];
+        node.dataset.key = item.key;
+        node.querySelector('.bubble').classList.remove('pending');
+        const meta = node.querySelector('.meta');
+        meta.firstChild.textContent = fmtTime(item.m.timestamp);
+        delete existing[reuseKey];
+        existing[item.key] = node;
+      } else {
+        node = buildRow(item);
+      }
+    }
+    chatEl.appendChild(node);  // appendChild also re-orders existing nodes
+    anchor = node;
+  }
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+/* ===================================================================
+   TEXT TO SPEECH
+   =================================================================== */
+function speakOne(text) {
+  if (!('speechSynthesis' in window)) { alert('Speech not supported in this browser.'); return; }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US';
+  speechSynthesis.speak(u);
+}
+function readAll() {
+  if (!('speechSynthesis' in window)) { alert('Speech not supported in this browser.'); return; }
+  speechSynthesis.cancel();
+  for (const m of messages.concat(pending)) {
+    if (m.text.indexOf(VOICE_PREFIX) === 0) continue;   // skip voice notes
+    const u = new SpeechSynthesisUtterance(m.text);
+    u.lang = 'en-US';
+    speechSynthesis.speak(u);
+  }
+}
+document.getElementById('readAllBtn').addEventListener('click', readAll);
+document.getElementById('stopSpeakBtn').addEventListener('click', () => speechSynthesis.cancel());
+
+/* ===================================================================
+   DICTATION — English speech to text. No audio is ever stored.
+   =================================================================== */
+const micBtn = document.getElementById('micBtn');
+let recognition = null, listening = false;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SR) {
+  recognition = new SR();
+  recognition.lang = 'en-US';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  let baseText = '';
+  recognition.addEventListener('start', () => { baseText = inputEl.value; });
+  recognition.addEventListener('result', (e) => {
+    let finalChunk = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalChunk += t; else interim += t;
+    }
+    if (finalChunk) baseText = (baseText + ' ' + finalChunk).trim();
+    inputEl.value = (baseText + ' ' + interim).trim();
+    autoGrow();
+  });
+  recognition.addEventListener('end', () => { if (listening) recognition.start(); });
+  recognition.addEventListener('error', (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      showNotice('🎤 Microphone access is blocked. Allow it via the lock or ⓘ ' +
+        'icon next to the address bar, then try again.', true);
+    }
+  });
+} else {
+  micBtn.disabled = true;
+  micBtn.title = 'Dictation needs Chrome or Edge';
+}
+micBtn.addEventListener('click', () => {
+  if (!recognition) return;
+  if (listening) {
+    listening = false; recognition.stop();
+    micBtn.classList.remove('listening'); inputEl.focus();
+  } else {
+    listening = true; recognition.start();
+    micBtn.classList.add('listening');
+  }
+});
+
+/* ===================================================================
+   VOICE NOTES — record audio, encode it to text (base64), store it in
+   the sheet cell, decode and play it back on tap. No files, no Drive.
+   Kept short so it fits inside one sheet cell (50,000 char limit).
+   =================================================================== */
+const recordBtn = document.getElementById('recordBtn');
+const MAX_REC_SECONDS = 25;       // recording length cap
+const MAX_ENCODED_CHARS = 47000;  // safety margin under the 50,000 cell limit
+let mediaRecorder = null, audioChunks = [], recording = false;
+let recTimer = null, recSeconds = 0;
+
+async function toggleRecord() {
+  if (recording) { stopRecording(); return; }
+
+  // the microphone API only exists in a secure context (https / localhost).
+  // A file opened straight from phone storage usually does NOT qualify.
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showNotice('🎤 Voice notes need a secure (https) connection. On a phone, ' +
+      'open this chat from an https web link — a file opened directly from ' +
+      'storage cannot use the microphone.', true);
+    return;
+  }
+  if (!window.MediaRecorder) {
+    showNotice('Voice recording is not supported in this browser. Try Chrome or Edge.', true);
+    return;
+  }
+
+  // first time only: tell the user the permission prompt is about to appear
+  if (localStorage.getItem('sheetchat_micasked') !== 'yes') {
+    showNotice('🎤 Tap "Allow" when your browser asks for microphone access.');
+    localStorage.setItem('sheetchat_micasked', 'yes');
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    const name = (e && e.name) ? e.name : '';
+    if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
+      showNotice('🎤 Microphone access is blocked. Tap the lock or ⓘ icon next ' +
+        'to the address bar, set Microphone to "Allow", then tap ⏺ again.', true);
+    } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      showNotice('No microphone was found on this device.', true);
+    } else {
+      showNotice('Could not open the microphone (' + (name || 'unknown error') + ').', true);
+    }
+    return;
+  }
+  hideNotice();
+
+  audioChunks = [];
+  let mime = 'audio/webm;codecs=opus';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'audio/webm';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'audio/mp4';   // iOS Safari
+  if (!MediaRecorder.isTypeSupported(mime)) mime = '';
+  mediaRecorder = new MediaRecorder(stream,
+    mime ? { mimeType: mime, audioBitsPerSecond: 12000 } : {});
+  mediaRecorder.addEventListener('dataavailable', e => {
+    if (e.data && e.data.size) audioChunks.push(e.data);
+  });
+  mediaRecorder.addEventListener('stop', () => {
+    stream.getTracks().forEach(t => t.stop());
+    finishRecording();
+  });
+  mediaRecorder.start();
+
+  recording = true; recSeconds = 0;
+  recordBtn.classList.add('listening');
+  recordBtn.textContent = '⏹';
+  inputEl.disabled = true;
+  updateRecLabel();
+  recTimer = setInterval(() => {
+    recSeconds++;
+    updateRecLabel();
+    if (recSeconds >= MAX_REC_SECONDS) stopRecording();
+  }, 1000);
+}
+
+function updateRecLabel() {
+  inputEl.placeholder = '● Recording voice note… ' + recSeconds +
+    's  (max ' + MAX_REC_SECONDS + 's — tap ⏹ to send)';
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  recording = false;
+  clearInterval(recTimer);
+  recordBtn.classList.remove('listening');
+  recordBtn.textContent = '⏺';
+  inputEl.disabled = false;
+  inputEl.placeholder = 'Type a message, or tap the mic to speak…';
+}
+
+function finishRecording() {
+  if (!audioChunks.length) return;
+  const blob = new Blob(audioChunks, { type: audioChunks[0].type || 'audio/webm' });
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;   // "data:audio/webm;base64,...." (text form)
+    if (dataUrl.length > MAX_ENCODED_CHARS) {
+      showNotice('That voice note is too long to store. Please record a ' +
+        'shorter one (around 15–20 seconds).', true);
+      return;
+    }
+    sendVoiceNote(dataUrl);
+  };
+  reader.readAsDataURL(blob);
+}
+
+async function sendVoiceNote(dataUrl) {
+  const url = getUrl();
+  if (!url) { setStatus('err', 'WEB_APP_URL is not set in the file'); return; }
+  const sender = getName();
+  const text = VOICE_PREFIX + dataUrl;
+  pending.push({ sender, text, timestamp: new Date().toISOString(), pending: true });
+  render();
+  playSend();
+  try {
+    await fetch(url, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ sender, text })
+    });
+  } catch (e) { setStatus('err', 'Send may have failed — will retry on sync'); }
+  setTimeout(poll, 1000);
+  setTimeout(poll, 2800);
+}
+
+recordBtn.addEventListener('click', toggleRecord);
+
+/* ===================================================================
+   GROUP VOICE CALLS — WebRTC audio in a "mesh": everyone in the call
+   connects directly to everyone else. The Google Sheet only carries the
+   connection-setup messages (signaling). Best for small groups (about 5
+   people). Requires https — calls do NOT work from a file opened off disk.
+   =================================================================== */
+const callBtn = document.getElementById('callBtn');
+const callOverlay = document.getElementById('callOverlay');
+const callCard = document.getElementById('callCard');
+const callAudios = document.getElementById('callAudios');
+const rtcConfig = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+]};
+
+let callState = 'idle';        // idle | ringing | incall
+let roomId = null;
+let localStream = null, callMuted = false, callStartMs = 0;
+let peers = {};                // name -> { pc, audioEl, connected }
+let members = {};              // name -> last-seen ms (everyone in the room, incl. me)
+let pendingInvite = null;      // incoming invite signal while ringing
+let callTimerInt = null, heartbeatInt = null, ringInt = null;
+let lastRoomActivity = null;   // { roomId, ts } — lets an idle user join late
+
+function setPollRate(ms) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(poll, ms);
+}
+function escapeHtml(s) {
+  const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML;
+}
+function newRoomId() { return Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
+
+/* Non-trickle ICE: gather all candidates first so a connection fits in
+   ONE signaling message (offer or answer). */
+function waitForIce(p) {
+  return new Promise(resolve => {
+    if (p.iceGatheringState === 'complete') return resolve();
+    const check = () => {
+      if (p.iceGatheringState === 'complete') {
+        p.removeEventListener('icegatheringstatechange', check); resolve();
+      }
+    };
+    p.addEventListener('icegatheringstatechange', check);
+    setTimeout(resolve, 4000);   // some networks never report 'complete'
+  });
+}
+
+async function getMic() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showNotice('📞 Calls need a secure (https) connection. Host this chat on ' +
+      'https — calls cannot work from a file opened directly from storage.', true);
+    return null;
+  }
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    showNotice('🎤 Microphone access is needed for calls. Allow it via the ' +
+      'lock or ⓘ icon by the address bar, then try again.', true);
+    return null;
+  }
+}
+
+async function postSignal(obj) {
+  const url = getUrl();
+  if (!url) return;
+  if (obj.roomId !== undefined) obj.callId = obj.roomId;   // backend carries the room id in its callId column
+  try {
+    await fetch(url, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ type: 'signal' }, obj))
+    });
+  } catch (e) {}
+}
+
+/* ---- one connection to one other person ---- */
+function makeAudioEl() {
+  const a = document.createElement('audio');
+  a.autoplay = true; a.playsInline = true;
+  callAudios.appendChild(a);
+  return a;
+}
+function newPeerConn(other) {
+  const pc = new RTCPeerConnection(rtcConfig);
+  pc.addEventListener('track', e => {
+    if (peers[other]) peers[other].audioEl.srcObject = e.streams[0];
+  });
+  const markConnected = () => {
+    const pr = peers[other];
+    if (pr && !pr.connected) { pr.connected = true; renderCall(); }
+  };
+  pc.addEventListener('connectionstatechange', () => {
+    if (pc.connectionState === 'connected') markConnected();
+    else if (pc.connectionState === 'failed') { removePeer(other); renderCall(); }
+  });
+  pc.addEventListener('iceconnectionstatechange', () => {
+    const s = pc.iceConnectionState;
+    if (s === 'connected' || s === 'completed') markConnected();
+    else if (s === 'failed') { removePeer(other); renderCall(); }
+  });
+  return pc;
+}
+function removePeer(other) {
+  const pr = peers[other];
+  if (!pr) return;
+  try { pr.pc.close(); } catch (e) {}
+  if (pr.audioEl) { pr.audioEl.srcObject = null; pr.audioEl.remove(); }
+  delete peers[other];
+}
+
+/* Deterministic rule so exactly ONE side of each pair makes the offer:
+   the person with the alphabetically-higher name offers; the other waits. */
+function maybeConnect(other) {
+  if (other === getName() || peers[other]) return;
+  if (getName() > other) createOfferTo(other);
+}
+async function createOfferTo(other) {
+  if (peers[other] || !localStream) return;
+  const pc = newPeerConn(other);
+  peers[other] = { pc: pc, audioEl: makeAudioEl(), connected: false };
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitForIce(pc);
+    postSignal({ kind: 'offer', roomId: roomId, from: getName(), to: other,
+                 data: JSON.stringify(pc.localDescription) });
+  } catch (e) { removePeer(other); }
+}
+async function answerOffer(other, data) {
+  if (!localStream) return;
+  if (!peers[other]) {
+    const pc = newPeerConn(other);
+    peers[other] = { pc: pc, audioEl: makeAudioEl(), connected: false };
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  }
+  const pc = peers[other].pc;
+  try {
+    await pc.setRemoteDescription(JSON.parse(data));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await waitForIce(pc);
+    postSignal({ kind: 'answer', roomId: roomId, from: getName(), to: other,
+                 data: JSON.stringify(pc.localDescription) });
+  } catch (e) { removePeer(other); }
+}
+
+/* ---- joining / starting a room ---- */
+async function enterRoom(rid, invitees) {
+  if (callState === 'incall') return;   // already in a call (idle or ringing are OK to enter from)
+  if (!getUrl()) { showNotice('WEB_APP_URL is not set — calls need the sheet link.', true); return; }
+  const stream = await getMic();
+  if (!stream) { endCall(); return; }   // mic blocked — clear the ring/card cleanly
+  localStream = stream;
+  roomId = rid;
+  callState = 'incall';
+  peers = {}; members = {};
+  members[getName()] = Date.now();
+  callMuted = false;
+  callStartMs = Date.now();
+  pendingInvite = null;
+  stopRing();
+  seenSignalIds = new Set();   // re-scan recent signals to discover who is here
+  setPollRate(1500);
+  postSignal({ kind: 'join', roomId: roomId, from: getName(), to: '*' });
+  (invitees || []).forEach(inv =>
+    postSignal({ kind: 'invite', roomId: roomId, from: getName(), to: inv }));
+  clearInterval(heartbeatInt);
+  heartbeatInt = setInterval(heartbeat, 8000);
+  clearInterval(callTimerInt);
+  callTimerInt = setInterval(renderCall, 1000);
+  renderCall();
+}
+function startGroupCall(invitees) { enterRoom(newRoomId(), invitees); }
+function acceptCall() { if (pendingInvite) enterRoom(pendingInvite.roomId, null); }
+function declineCall() {
+  if (pendingInvite) {
+    postSignal({ kind: 'decline', roomId: pendingInvite.roomId,
+                 from: getName(), to: pendingInvite.from });
+  }
+  endCall();
+}
+
+function heartbeat() {
+  if (callState !== 'incall') return;
+  postSignal({ kind: 'presence', roomId: roomId, from: getName(), to: '*' });
+  const now = Date.now();
+  for (const name in members) {
+    if (name === getName()) continue;
+    if (now - members[name] > 24000) {     // not heard from in 24s — they left
+      removePeer(name);
+      delete members[name];
+      renderCall();
+    }
+  }
+}
+
+function endCall() {
+  if (callState === 'incall' && roomId) {
+    postSignal({ kind: 'leave', roomId: roomId, from: getName(), to: '*' });
+  }
+  callState = 'idle';
+  for (const name in peers) removePeer(name);
+  peers = {}; members = {};
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  roomId = null; pendingInvite = null; callMuted = false;
+  clearInterval(callTimerInt); clearInterval(heartbeatInt); stopRing();
+  setPollRate(POLL_MS);
+  renderCall();
+}
+
+function toggleMute() {
+  if (!localStream) return;
+  callMuted = !callMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !callMuted);
+  renderCall();
+}
+
+/* ---- ringtone (synthesised) ---- */
+function playRing() {
+  if (!soundOn) return;
+  try { ensureAudio(); } catch (e) { return; }
+  const ring = () => { tone(480, 480, 0, 0.35, 0.13); tone(620, 620, 0.45, 0.35, 0.13); };
+  ring();
+  ringInt = setInterval(ring, 2400);
+}
+function stopRing() { clearInterval(ringInt); ringInt = null; }
+
+/* ---- signaling rows arriving from the sheet ---- */
+function processSignals(signals, myName) {
+  for (const sig of signals) {
+    if (seenSignalIds.has(sig.id)) continue;
+    seenSignalIds.add(sig.id);
+    if (firstLoad) continue;     // ignore signals from before the app was opened
+    sig.roomId = sig.callId;     // backend delivers the room id in the callId field
+    handleSignal(sig, myName);
+  }
+  updateCallBtn();
+}
+
+async function handleSignal(sig, myName) {
+  if (sig.from === myName) return;
+  const fresh = (Date.now() - new Date(sig.timestamp).getTime()) < 30000;
+
+  // an invite, while we are free -> ring
+  if (sig.kind === 'invite' && sig.to === myName) {
+    if (callState === 'idle' && fresh) {
+      pendingInvite = sig;
+      callState = 'ringing';
+      playRing();
+      renderCall();
+    }
+    return;
+  }
+  // remember that a call is active, so an idle user can still join it late
+  if ((sig.kind === 'join' || sig.kind === 'presence') && fresh && callState === 'idle') {
+    lastRoomActivity = { roomId: sig.roomId, ts: Date.now() };
+  }
+  // everything below only matters for the room I am currently in
+  if (callState !== 'incall' || sig.roomId !== roomId) return;
+
+  if (sig.kind === 'join' || sig.kind === 'presence') {
+    if (!fresh) return;
+    const isNew = !members[sig.from];
+    members[sig.from] = Date.now();
+    if (isNew && sig.kind === 'join') {
+      postSignal({ kind: 'presence', roomId: roomId, from: myName, to: '*' });
+    }
+    maybeConnect(sig.from);
+    if (isNew) renderCall();
+  } else if (sig.kind === 'leave') {
+    removePeer(sig.from);
+    delete members[sig.from];
+    renderCall();
+  } else if (sig.kind === 'offer' && sig.to === myName) {
+    members[sig.from] = Date.now();
+    await answerOffer(sig.from, sig.data);
+    renderCall();
+  } else if (sig.kind === 'answer' && sig.to === myName) {
+    members[sig.from] = Date.now();
+    const pr = peers[sig.from];
+    if (pr) { try { await pr.pc.setRemoteDescription(JSON.parse(sig.data)); } catch (e) {} }
+  } else if (sig.kind === 'decline' && sig.to === myName) {
+    showNotice(sig.from + ' declined the call.', false);
+  }
+}
+
+function getJoinableRoom() {
+  if (callState !== 'idle' || !lastRoomActivity) return null;
+  if (Date.now() - lastRoomActivity.ts > 25000) return null;
+  return lastRoomActivity.roomId;
+}
+function updateCallBtn() {
+  callBtn.classList.toggle('on', callState !== 'idle' || !!getJoinableRoom());
+}
+
+/* ---- call UI ---- */
+function renderCall() {
+  updateCallBtn();
+  if (callState === 'idle') { callOverlay.classList.remove('show'); callCard.innerHTML = ''; return; }
+  callOverlay.classList.add('show');
+
+  if (callState === 'ringing') {
+    callCard.innerHTML =
+      '<div class="cicon pulse-ring">📞</div>' +
+      '<div class="cwho">' + escapeHtml(pendingInvite ? pendingInvite.from : 'Someone') + '</div>' +
+      '<div class="cstate">is inviting you to a group call…</div>' +
+      '<div class="callbtns">' +
+        '<button class="callbtn accept" id="cAccept" title="Join">✓</button>' +
+        '<button class="callbtn hang" id="cDecline" title="Decline">✕</button>' +
+      '</div>';
+    callCard.querySelector('#cAccept').onclick = acceptCall;
+    callCard.querySelector('#cDecline').onclick = declineCall;
+    return;
+  }
+
+  // in a call
+  const names = Object.keys(members).sort();
+  const others = names.filter(n => n !== getName());
+  const secs = Math.max(0, Math.floor((Date.now() - callStartMs) / 1000));
+  const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+  const ss = String(secs % 60).padStart(2, '0');
+  let list = '';
+  for (const n of names) {
+    const me = n === getName();
+    const on = me || (peers[n] && peers[n].connected);
+    list += '<div class="partitem"><span class="pstatus' + (on ? ' on' : '') + '"></span>' +
+            escapeHtml(n) + (me ? ' (you)' : (on ? '' : ' · connecting…')) + '</div>';
+  }
+  callCard.innerHTML =
+    '<div class="cicon">🎙️</div>' +
+    '<div class="cwho">Group call</div>' +
+    '<div class="cstate">' +
+      (others.length ? others.length + ' other' + (others.length > 1 ? 's' : '')
+                     : 'Waiting for others…') +
+      ' · ' + mm + ':' + ss + '</div>' +
+    '<div class="partlist">' + list + '</div>' +
+    '<div class="callbtns">' +
+      '<button class="callbtn mute' + (callMuted ? ' on' : '') + '" id="cMute" title="Mute">' +
+        (callMuted ? '🔇' : '🎤') + '</button>' +
+      '<button class="callbtn hang" id="cHang" title="Leave call">✕</button>' +
+    '</div>';
+  callCard.querySelector('#cMute').onclick = toggleMute;
+  callCard.querySelector('#cHang').onclick = endCall;
+}
+
+function showCallPicker() {
+  const myName = getName();
+  const peerNames = [];
+  for (const m of messages) {
+    if (m.sender && m.sender !== myName && peerNames.indexOf(m.sender) === -1) peerNames.push(m.sender);
+  }
+  const joinable = getJoinableRoom();
+  callOverlay.classList.add('show');
+  let html = '<div class="cicon">📞</div><div class="cwho">Start a call</div>';
+  if (joinable) {
+    html += '<button class="joinbtn" id="cJoin">⏎ Join the group call in progress</button>';
+  }
+  if (peerNames.length === 0) {
+    html += '<div class="cstate" style="margin-top:14px">No one else has chatted yet.</div>';
+  } else {
+    html += '<div class="cstate" style="margin-top:14px">Pick who to invite:</div>' +
+            '<div class="pickerlist">';
+    peerNames.forEach((p, i) => {
+      html += '<label class="pickeritem"><input type="checkbox" data-i="' + i + '">' +
+              '<span>' + escapeHtml(p) + '</span></label>';
+    });
+    html += '</div>';
+  }
+  html += '<div class="callbtns">';
+  if (peerNames.length) html += '<button class="callbtn accept" id="cStart" title="Call">📞</button>';
+  html += '<button class="callbtn hang" id="cCancel" title="Cancel">✕</button></div>';
+  callCard.innerHTML = html;
+
+  const close = () => { callOverlay.classList.remove('show'); callCard.innerHTML = ''; };
+  const cJoin = callCard.querySelector('#cJoin');
+  if (cJoin) cJoin.onclick = () => { close(); enterRoom(joinable, null); };
+  const cStart = callCard.querySelector('#cStart');
+  if (cStart) cStart.onclick = () => {
+    const picked = [];
+    callCard.querySelectorAll('input[type=checkbox]').forEach(c => {
+      if (c.checked) picked.push(peerNames[+c.dataset.i]);
+    });
+    if (!picked.length) { showNotice('Select at least one person to call.', false); return; }
+    close();
+    startGroupCall(picked);
+  };
+  callCard.querySelector('#cCancel').onclick = close;
+}
+
+callBtn.addEventListener('click', () => {
+  if (callState !== 'idle') { renderCall(); return; }   // re-open the active call card
+  if (!window.RTCPeerConnection) {
+    showNotice('Voice calls are not supported in this browser.', true);
+    return;
+  }
+  showCallPicker();
+});
+
+/* ===================================================================
+   COMPOSER
+   =================================================================== */
+function autoGrow() {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 150) + 'px';
+}
+inputEl.addEventListener('input', autoGrow);
+document.getElementById('sendBtn').addEventListener('click', send);
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+/* ---- start ---- */
+poll();
+pollTimer = setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
