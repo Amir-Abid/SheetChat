@@ -278,6 +278,16 @@
   .pstatus { width: 8px; height: 8px; border-radius: 50%; flex: none; background: #e0a73b; }
   .pstatus.on { background: #38d39f; }
 
+  /* blocking error when the link has no ?name= */
+  #nameError {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.74);
+    -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
+  }
+  #nameError.show { display: flex; }
+  #nameError .cstate b { color: var(--text); }
+
   /* ---- phone / small screens ---- */
   @media (max-width: 600px) {
     header { padding: 9px 10px; gap: 6px; }
@@ -331,12 +341,25 @@
 <div id="callAudios" style="display:none"></div>
 <div id="callOverlay"><div class="callcard" id="callCard"></div></div>
 
+<div id="nameError">
+  <div class="callcard">
+    <div class="cicon">⚠️</div>
+    <div class="cwho">Name missing</div>
+    <div class="cstate" style="margin-top:10px; line-height:1.65">
+      This chat link has no name attached.<br>
+      Open the personal link you were given — it must end with
+      <b>?name=YourName</b><br><br>
+      Example:<br><b>…/index.html?name=Amir</b>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ===================================================================
    CONFIG — fill these two in before sending the file to anyone.
    There is no settings screen, so this is the only place to set them.
    =================================================================== */
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwYiPM69KKryd_bPTdPzSD40fyhdyjKoHWNzkZlI1X8VWS3wCp2HntHB48_fnPOf-28GA/exec";   // <-- paste your Apps Script /exec URL between the quotes
+const WEB_APP_URL = "";   // <-- paste your Apps Script /exec URL between the quotes
 
 /* PRESET_NAME is just a fallback. The real name should come from each
    person's link: e.g.  https://you.github.io/mychat/index.html?name=Amir
@@ -368,7 +391,7 @@ function getUrl()  { return (WEB_APP_URL || '').trim(); }
 function getName() {
   let n = '';
   try { n = new URLSearchParams(location.search).get('name') || ''; } catch (e) {}
-  return (n || PRESET_NAME || '').trim() || 'Me';
+  return (n || PRESET_NAME || '').trim();   // empty when no name was supplied
 }
 
 soundBtn.classList.toggle('on', soundOn);
@@ -1258,8 +1281,12 @@ inputEl.addEventListener('keydown', (e) => {
 });
 
 /* ---- start ---- */
-poll();
-pollTimer = setInterval(poll, POLL_MS);
+if (!getName()) {
+  document.getElementById('nameError').classList.add('show');   // block use until a name is given
+} else {
+  poll();
+  pollTimer = setInterval(poll, POLL_MS);
+}
 </script>
 </body>
 </html>
